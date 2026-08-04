@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Satellite Link Budget & SWaP-C Calculator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #f8fafc;
+            --accent: #38bdf8;
+            --success: #22c55e;
+            --warning: #eab308;
+            --danger: #ef4444;
+            --border: #334155;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 24px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        header {
+            margin-bottom: 24px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 16px;
+        }
+        h1 { margin: 0 0 8px 0; color: var(--accent); }
+        p { margin: 0; color: #94a3b8; font-size: 0.95rem; }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: 380px 1fr;
+            gap: 24px;
+        }
+        @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+        
+        .panel {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+        
+        .control-group {
+            margin-bottom: 16px;
+        }
+        label {
+            display: flex;
+            justify-content: space-between;
+            font-weight: 600;
+            font-size: 0.85rem;
+            margin-bottom: 6px;
+        }
+        .val-badge {
+            color: var(--accent);
+            font-weight: 700;
+        }
+        input[type="range"], select {
+            width: 100%;
+            background: #0f172a;
+            border: 1px solid var(--border);
+            color: white;
+            padding: 6px;
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .metric-card {
+            background: #0f172a;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+        }
+        .metric-card .title { font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.05em; }
+        .metric-card .value { font-size: 1.6rem; font-weight: 800; margin: 8px 0; }
+        
+        .status-pass { color: var(--success); border-color: var(--success); }
+        .status-warn { color: var(--warning); border-color: var(--warning); }
+        .status-fail { color: var(--danger); border-color: var(--danger); }
+        
+        .chart-container {
+            position: relative;
+            height: 320px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>Satellite Downlink Link Budget & SWaP-C Calculator</h1>
+        <p>Interactive educational tool for HND Space Technologies students</p>
+    </header>
+
+    <div class="grid">
+        <!-- Input Parameters Sidebar -->
+        <div class="panel">
+            <h3 style="margin-top:0; border-bottom: 1px solid var(--border); padding-bottom:10px;">Link Parameters</h3>
+            
+            <div class="control-group">
+                <label>Frequency Band: <span id="lbl_f" class="val-badge">8.2 GHz</span></label>
+                <select id="f" onchange="recalculate()">
+                    <option value="2.2">S-band (2.2 GHz)</option>
+                    <option value="8.2" selected>X-band (8.2 GHz)</option>
+                    <option value="28.0">Ka-band (28.0 GHz)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Orbit Altitude ($h$): <span id="lbl_h" class="val-badge">700 km</span></label>
+                <input type="range" id="h" min="300" max="2000" step="10" value="700" oninput="recalculate()">
+            </div>
+
+            <div class="control-group">
+                <label>Elevation Angle ($\epsilon$): <span id="lbl_eps" class="val-badge">10°</span></label>
+                <input type="range" id="eps" min="5" max="90" step="1" value="10" oninput="recalculate()">
+            </div>
+
+            <div class="control-group">
+                <label>Sat Transmit Power ($P_t$): <span id="lbl_Pt" class="val-badge">8 W</span></label>
+                <input type="range" id="Pt" min="1" max="50" step="1" value="8" oninput="recalculate()">
+            </div>
+
+            <div class="control-group">
+                <label>Sat Antenna Gain ($G_t$): <span id="lbl_Gt" class="val-badge">30 dBi</span></label>
+                <input type="range" id="Gt" min="10" max="45" step="1" value="30" oninput="recalculate()">
+            </div>
+
+            <div class="control-group">
+                <label>Ground Station Gain ($G_r$): <span id="lbl_Gr" class="val-badge">48 dBi</span></label>
+                <input type="range" id="Gr" min="20" max="60" step="1" value="48" oninput="recalculate()">
+            </div>
+
+            <div class="control-group">
+                <label>Data Rate ($R_b$): <span id="lbl_Rb" class="val-badge">200 Mbps</span></label>
+                <input type="range" id="Rb" min="10" max="1000" step="10" value="200" oninput="recalculate()">
+            </div>
+
+            <div class="control-group">
+                <label>FEC Coding Gain: <span id="lbl_fec" class="val-badge">3.0 dB</span></label>
+                <input type="range" id="fec" min="0" max="8" step="0.5" value="3.0" oninput="recalculate()">
+            </div>
+        </div>
+
+        <!-- Dashboard & Chart -->
+        <div>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="title">Slant Range</div>
+                    <div class="value" id="res_d">0 km</div>
+                </div>
+                <div class="metric-card">
+                    <div class="title">Path Loss (FSPL)</div>
+                    <div class="value" id="res_fspl">0 dB</div>
+                </div>
+                <div class="metric-card">
+                    <div class="title">Received Power</div>
+                    <div class="value" id="res_pr">0 dBW</div>
+                </div>
+                <div class="metric-card" id="card_margin">
+                    <div class="title">Link Margin</div>
+                    <div class="value" id="res_margin">0 dB</div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h3 style="margin-top:0;">Link Margin vs. Ground Station Elevation Angle</h3>
+                <div class="chart-container">
+                    <canvas id="marginChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const Re = 6371.0;
+const k_dB = -228.6;
+const Tsys = 160.0;
+const Azenith = 0.4;
+const Lmisc = 2.5;
+const Req_EbN0 = 10.5;
+
+let chart = null;
+
+function computeRange(h, epsDeg) {
+    const rad = epsDeg * Math.PI / 180.0;
+    return Re * (Math.sqrt(Math.pow((h + Re)/Re, 2) - Math.pow(Math.cos(rad), 2)) - Math.sin(rad));
+}
+
+function calculateForParams(h, eps, f, Pt, Gt, Gr, Rb, fec) {
+    const d = computeRange(h, eps);
+    const fspl = 92.45 + 20*Math.log10(d) + 20*Math.log10(f);
+    const aAtm = Azenith / Math.sin(eps * Math.PI / 180.0);
+    const eirp = 10 * Math.log10(Pt) + Gt;
+    const pr = eirp - fspl - aAtm - Lmisc + Gr;
+    const n0 = k_dB + 10 * Math.log10(Tsys);
+    const cN0 = pr - n0;
+    const ebN0 = cN0 - 10 * Math.log10(Rb * 1e6) + fec;
+    const margin = ebN0 - Req_EbN0;
+
+    return { d, fspl, pr, margin };
+}
+
+function recalculate() {
+    const f = parseFloat(document.getElementById('f').value);
+    const h = parseFloat(document.getElementById('h').value);
+    const eps = parseFloat(document.getElementById('eps').value);
+    const Pt = parseFloat(document.getElementById('Pt').value);
+    const Gt = parseFloat(document.getElementById('Gt').value);
+    const Gr = parseFloat(document.getElementById('Gr').value);
+    const Rb = parseFloat(document.getElementById('Rb').value);
+    const fec = parseFloat(document.getElementById('fec').value);
+
+    // Update labels
+    document.getElementById('lbl_f').innerText = f + ' GHz';
+    document.getElementById('lbl_h').innerText = h + ' km';
+    document.getElementById('lbl_eps').innerText = eps + '°';
+    document.getElementById('lbl_Pt').innerText = Pt + ' W';
+    document.getElementById('lbl_Gt').innerText = Gt + ' dBi';
+    document.getElementById('lbl_Gr').innerText = Gr + ' dBi';
+    document.getElementById('lbl_Rb').innerText = Rb + ' Mbps';
+    document.getElementById('lbl_fec').innerText = fec.toFixed(1) + ' dB';
+
+    const current = calculateForParams(h, eps, f, Pt, Gt, Gr, Rb, fec);
+
+    document.getElementById('res_d').innerText = Math.round(current.d) + ' km';
+    document.getElementById('res_fspl').innerText = current.fspl.toFixed(2) + ' dB';
+    document.getElementById('res_pr').innerText = current.pr.toFixed(2) + ' dBW';
+    document.getElementById('res_margin').innerText = (current.margin >= 0 ? '+' : '') + current.margin.toFixed(2) + ' dB';
+
+    const card = document.getElementById('card_margin');
+    card.className = 'metric-card ' + (current.margin >= 3.0 ? 'status-pass' : (current.margin >= 0 ? 'status-warn' : 'status-fail'));
+
+    // Plot Margin vs Elevation Curve
+    const angles = [];
+    const margins = [];
+    for (let a = 5; a <= 90; a += 2) {
+        angles.push(a + '°');
+        margins.push(calculateForParams(h, a, f, Pt, Gt, Gr, Rb, fec).margin);
+    }
+
+    if (chart) {
+        chart.data.labels = angles;
+        chart.data.datasets[0].data = margins;
+        chart.update();
+    } else {
+        const ctx = document.getElementById('marginChart').getContext('2d');
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: angles,
+                datasets: [
+                    { label: 'Link Margin (dB)', data: margins, borderColor: '#38bdf8', borderWidth: 3, fill: false },
+                    { label: '+3 dB Threshold', data: Array(angles.length).fill(3.0), borderColor: '#eab308', borderWidth: 2, borderDash: [6, 6], pointRadius: 0 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { title: { display: true, text: 'Elevation Angle (degrees)', color: '#94a3b8' }, grid: { color: '#334155' } },
+                    y: { title: { display: true, text: 'Margin (dB)', color: '#94a3b8' }, grid: { color: '#334155' } }
+                },
+                plugins: { legend: { labels: { color: '#f8fafc' } } }
+            }
+        });
+    }
+}
+
+window.onload = recalculate;
+</script>
+</body>
+</html>
